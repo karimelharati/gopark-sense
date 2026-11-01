@@ -1,8 +1,18 @@
-# GoPark Sense — local hackathon app
+# GoPark Sense - local hackathon app
 
-Launch **GoPark Sense.lnk** or **Open GoPark.cmd** in `C:\Users\Rashid\Desktop\test`. It starts the saved local database and opens a separate Chrome/Edge app window. **Stop GoPark.cmd** stops the owned background processes. The app uses `http://127.0.0.1:4173`; a hosted website is not required.
+## Run on another Windows laptop
 
-Existing local bookings, balances, visits, and history are migrated in place. A pre-upgrade copy of the app and its demo state is under `outputs/before-v2/`. The existing public/private hosted version is not updated by this local-only change.
+The project can run from any normal folder on another Windows 10/11 x64 laptop. You do not need the original computer, its folders, its shortcuts, its database, or Codex.
+
+1. Install [Node.js](https://nodejs.org/en/download), version 22.13 or newer, with npm. Chrome or Microsoft Edge is needed for the app windows.
+2. Download this repository with **Code -> Download ZIP**, then **extract the ZIP**. Alternatively, clone it with GitHub Desktop.
+3. Inside the extracted project folder, double-click **SETUP.cmd**. Keep internet access on while dependencies and the official Cloudflare helper are downloaded. Setup builds the app and prepares this laptop's local database. If setup reports an error, follow it and rerun; existing bookings are preserved.
+4. Double-click **Open GoPark.cmd** for the main app. It opens at http://127.0.0.1:4173.
+5. For the live two-phone demo, double-click **Open GoPark Two Phones.cmd**. Scan its attendant QR on one phone and its driver QR on the other. Enable precise location on both phones and keep their screens open. New tests use a 10 m estimated alert distance, adjustable by the attendant. Keep this laptop awake and online.
+
+**Stop GoPark.cmd** stops the main app. **Stop GoPark Two Phones.cmd** stops the phone server and its temporary HTTPS link. The regular app works locally; phones use a temporary HTTPS tunnel so browser location permissions work. Another laptop starts with its own demo data and creates its own phone links; the original laptop does not need to be running.
+
+The first setup takes longer while packages download and the app builds. Running setup again does not replace the existing parking database. Helper binaries and all runtime data stay in ignored local folders and are not uploaded to GitHub. Gate movement, payments, and rewards remain simulations.
 
 ## What is implemented
 
@@ -37,9 +47,9 @@ Before-start duration reductions can adjust the simulated price. Reductions afte
 
 ## Suggested demonstration
 
-**Live two-phone test (no fixed destination):** double-click **GoPark Two Phones.lnk** in `C:\Users\Rashid\Desktop\test`. A laptop pairing window shows two QR codes. Scan **Test attendant** with phone 1 and **Test driver** with phone 2. These codes pair the phones once; there is no arrival scan or driver confirmation. Tap **Enable live location** on each phone and grant precise location. Keep both screens open and the laptop awake with internet access.
+**Live two-phone test (no fixed destination):** double-click **Open GoPark Two Phones.cmd** in the project folder after completing **SETUP.cmd**. The laptop pairing window shows two QR codes. Scan **Test attendant** with phone 1 and **Test driver** with phone 2. Tap **Enable live location** on both phones and grant precise location. These codes pair the phones once; there is no arrival scan or driver confirmation. Keep both screens open and the laptop awake with internet access.
 
-Move either phone toward the other, anywhere. The attendant receives an in-app arrival popup when their fresh GPS positions are within the selected distance, including both accuracy estimates. The default is 100 metres; the attendant can choose 30–300 metres. Test outdoors: GPS may be too inaccurate indoors, and it cannot reliably detect two phones a few metres apart. Neither phone has a fixed parking coordinate. If both phones already start close, the alert appears as soon as both provide suitable fixes.
+Move either phone toward the other, anywhere. The attendant receives an in-app arrival popup when both fresh estimated GPS positions are within the selected distance. New tests default to 10 metres; choices range from 10-300 metres. Existing sessions keep their previous setting until changed. The popup labels uncertain matches and requires the attendant to identify the car. A 10 m setting does not guarantee 10 m physical accuracy. Test outdoors. There is no fixed parking coordinate; if the phones start close, the alert appears as soon as both provide suitable fixes.
 
 The attendant identifies the displayed car and taps **Confirm car & open gate**. Both phones show the simulated gate opening. Occupancy stays at zero until the attendant taps **Car has entered**, then becomes one. **Confirm car has departed** frees the space. **Reset test** starts another visit without pairing again. Pause the driver's GPS, move outside the alert distance, reset, and enable GPS again to repeat the approach. Pausing either phone immediately prevents a proximity-based opening until fresh nearby positions return. The arrival popup stays visible during a temporary loss of location, with its open control disabled. Staff can dismiss it with Review on dashboard, or use Show arrival popup again. Both phones show the same session code plus separate driver and attendant location freshness/accuracy diagnostics. GPS going away never releases a parked car's space.
 
@@ -51,7 +61,7 @@ This is a foreground browser test with simulated gate movement and separate demo
 
 Free-form place lookup uses [Photon](https://github.com/komoot/photon/blob/master/docs/api-v1.md) over OpenStreetMap data. Requests run only on explicit submission, with caching, a conservative rate limit, timeout and an error fallback. Built-in approximate demo landmarks and manually entered coordinates do not need online place lookup. The public Photon demonstration service has no availability guarantee; configure the trusted server environment variable `PHOTON_SEARCH_URL` to use another compatible HTTPS instance. Search text is not saved in the parking database. No Nominatim public API is used.
 
-**Animated arrival:** double-click **GoPark Arrival Demo.lnk** in the parent folder, open **Gate console → Visual demo**, or run `Open GoPark.cmd --arrival-demo`. Choose one of four cases: **1. Gate + driver confirmation; 2. Gate + automatic GPS alert; 3. No gate + driver confirmation; 4. No gate + automatic GPS alert.** Cases 1 and 3 require the driver to tap **Confirm my arrival**. Cases 2 and 4 have no driver buttons. In gated cases, the attendant opens the gate and passage confirms check-in. In ungated cases, the car enters without a barrier and the attendant confirms its actual entry before occupancy updates. **Play full demo** animates every actor’s steps; **Try this case** pauses for the required driver or attendant action. Selecting a different case resets the visual scenario. The eight-space lane is simulated and does not alter saved bookings or open a physical gate.
+**Animated arrival:** run **Open GoPark.cmd --arrival-demo**, open **Gate console → Visual demo**, or run `Open GoPark.cmd --arrival-demo`. Choose one of four cases: **1. Gate + driver confirmation; 2. Gate + automatic GPS alert; 3. No gate + driver confirmation; 4. No gate + automatic GPS alert.** Cases 1 and 3 require the driver to tap **Confirm my arrival**. Cases 2 and 4 have no driver buttons. In gated cases, the attendant opens the gate and passage confirms check-in. In ungated cases, the car enters without a barrier and the attendant confirms its actual entry before occupancy updates. **Play full demo** animates every actor’s steps; **Try this case** pauses for the required driver or attendant action. Selecting a different case resets the visual scenario. The eight-space lane is simulated and does not alter saved bookings or open a physical gate.
 
 1. Explore → reserve an AUB space starting in 15 minutes. Review the interval, cancellation terms and tier discount.
 2. My parking → enable GPS, then “I’m at the entrance.” The attendant receives an alert; occupancy remains unchanged.
@@ -78,22 +88,20 @@ Firmware uses a low-voltage LED/relay pulse and two direction-sensitive beam inp
 
 ## Run from source
 
-Requires Node.js 22.13+ and npm. This computer has portable tools in the parent `.tools` folder.
+The Windows SETUP.cmd wrapper is the simplest option. With Node.js 22.13+ and npm installed, terminal users can run:
 
 ```powershell
-npm.cmd run install:ci
-npm.cmd run build
+npm.cmd run setup
+npm.cmd run desktop
 ```
 
-For a **fresh** local database, apply migrations once in order:
+Run the two-phone demo separately with `npm.cmd run phones`. The laptop pairing screen provides the current phone links. Internet is required for the temporary HTTPS tunnel; screens must remain open for location and arrival popups.
 
-```powershell
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_lovely_klaw.sql
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0001_keen_jubilee.sql
-npm.cmd start -- --port 4173
-```
+Setup installs missing dependencies, builds the project, creates the three current database tables if absent, and finds or downloads the official Cloudflare helper. Downloaded Windows binaries are checked against the SHA-256 digest from the official release metadata. Setup checks an existing portable helper, a project-local copy in .sites-runtime/tools, and PATH. GOPARK_CLOUDFLARED can specify an installed helper's full path. Nothing is installed system-wide. Run `npm.cmd run setup -- --reinstall` if dependencies are incomplete.
 
-Both migrations are already applied in this workspace. Do not replay the CREATE TABLE migrations on an existing database.
+The double-click launchers and automatic helper download target Windows x64. On other operating systems, install a suitable cloudflared helper on PATH and use the source commands; desktop launch and physical phone behavior on that system have not been verified. On macOS/Linux use `npm` instead of `npm.cmd`.
+
+To build without setup, use `npm.cmd run install:ci` and `npm.cmd run build`. A fresh main-app database must then be initialized with the SQL files under drizzle before starting Wrangler. Prefer setup: it applies the current table definitions idempotently and preserves saved data. Local runtime data, signing keys, pairing tokens, build output and dependencies are excluded by .gitignore.
 
 ## Verification and practical limits
 

@@ -6,6 +6,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "setup": "node scripts/setup-local.mjs",
+    "desktop": "node scripts/launch-local.mjs",
+    "phones": "node scripts/launch-phone-test.mjs --stay",
     "install:ci": "node scripts/install-ci.mjs",
     "dev": "node scripts/run-framework.mjs dev",
     "build": "node scripts/build-offline.mjs && node scripts/run-framework.mjs build",

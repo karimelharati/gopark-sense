@@ -3,14 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { findPhoneHelper } from './phone-helper.mjs';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = path.join(project, '.sites-runtime');
 fs.mkdirSync(runtime, { recursive: true });
 const recordPath = path.join(runtime, 'phone-test-server.json');
-const tunnelBinary = path.join(project, '..', '.tools', 'phone-test', 'cloudflared.exe');
+const tunnelBinary = findPhoneHelper(project);
 const serverScript = path.join(project, 'scripts', 'phone-test-server.mjs');
-const address = 'http://127.0.0.1:4175';
+const address = `http://127.0.0.1:${Number(process.env.GOPARK_PHONE_PORT || 4175)}`;
 const children = [];
 const sleep = delay => new Promise(resolve => setTimeout(resolve, delay));
 let record;
@@ -20,13 +21,14 @@ async function request(endpoint, data) {
   const value = await response.json(); if (!response.ok) throw new Error(value.error || 'Phone test unavailable.'); return value;
 }
 function ownedProcess(pid, expected, extra) {
-  if (!Number.isInteger(pid)) return false;
+  if (!Number.isInteger(pid) || !expected) return false;
   const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" | Select-Object -ExpandProperty CommandLine`], { windowsHide: true, encoding: 'utf8' });
   return (result.stdout || '').toLowerCase().includes(expected.toLowerCase()) && (!extra || result.stdout.includes(extra));
 }
 if (process.argv.includes('--stop')) {
   if (!record || record.project !== project) { console.log('No GoPark two-phone test is recorded.'); process.exit(0); }
-  for (const [pid, expected, extra] of [[record.tunnelPid, tunnelBinary, address], [record.pid, serverScript, null]]) {
+  for (const [pid, expected, extra] of [[record.tunnelPid, record.tunnelBinary || tunnelBinary, address], [record.pid, serverScript, null]]) {
+    if (!expected) continue;
     if (ownedProcess(pid, expected, extra)) spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true });
   }
   console.log('Two-phone test stopped. The temporary phone link is closed.'); process.exit(0);
@@ -47,7 +49,7 @@ async function start() {
     if (!ready) throw new Error('Two-phone server could not start. Check .sites-runtime/phone-test-server.log.');
   }
   if (!process.argv.includes('--local-only')) {
-    if (!fs.existsSync(tunnelBinary)) throw new Error('The official cloudflared helper is missing from .tools/phone-test.');
+    if (!tunnelBinary) throw new Error('The Cloudflare helper is missing. Run SETUP.cmd or npm run setup first.');
     let activeTunnel = false;
     const status = await request('/admin/status');
     if (status.publicUrl && record.tunnelPid && ownedProcess(record.tunnelPid, tunnelBinary, address)) {
@@ -58,6 +60,7 @@ async function start() {
       fs.writeFileSync(logPath, ''); const log = fs.openSync(logPath, 'a');
       const tunnel = spawn(tunnelBinary, ['tunnel', '--url', address, '--protocol', 'http2', '--no-autoupdate'], { cwd: project, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
       children.push(tunnel); tunnel.unref(); fs.closeSync(log); record.tunnelPid = tunnel.pid;
+      record.tunnelBinary = tunnelBinary;
       let publicUrl = null;
       for (let i = 0; i < 90; i++) {
         await sleep(700); const logText = fs.readFileSync(logPath, 'utf8');
