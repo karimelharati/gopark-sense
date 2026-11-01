@@ -2,7 +2,8 @@
 import { useState,useEffect,useRef,useCallback } from 'react';
 import { Map,Car,Gift,ScanLine,Leaf,Settings2,Smartphone,Wifi,WifiOff,Bell,MapPin,ChevronRight,CheckCircle2,X } from 'lucide-react';
 import { ParkingContext,clock } from './context';
-import { activeBooking,tier } from '../lib/parking.mjs';
+import { activeBooking,membership,operationalAlerts } from '../lib/parking.mjs';
+import { cacheWorld,syncOfflineRecords } from '../lib/offline-store.mjs';
 import { Discover,MyParking,Rewards } from './driver-views';
 import Gate from './gate';
 import Dialogs from './dialogs';
@@ -12,25 +13,29 @@ const NAV=[{id:'discover',label:'Find parking',icon:Map},{id:'activity',label:'M
 export default function ParkingApp(){
   const [world,setWorld]=useState(null),[tab,setTab]=useState('discover'),[personId,setPersonId]=useState('rashid');
   const [selected,setSelected]=useState('aub'),[sheet,setSheet]=useState(null),[hours,setHours]=useState(2),[plate,setPlate]=useState('B123456'),[rewardId,setRewardId]=useState('');
+  const [bookingDraft,setBookingDraft]=useState(null);
   const [notice,setNotice]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[online,setOnline]=useState(true),[loadedAt,setLoadedAt]=useState(null),[,tick]=useState(0);
   const [gateLot,setGateLot]=useState('aub'),[direction,setDirection]=useState('entry'),[gatePlate,setGatePlate]=useState(''),[camera,setCamera]=useState(false);
   const [gpsOn,setGpsOn]=useState(false),[gpsMessage,setGpsMessage]=useState(''),[position,setPosition]=useState(null),[rulesDraft,setRulesDraft]=useState(null),[installPrompt,setInstallPrompt]=useState(null);
   const watch=useRef(null),lastGps=useRef(0),mutation=useRef(false),revision=useRef(0),pending=useRef(null),toastTimer=useRef(null),worldRef=useRef(world);
+  const previousAlerts=useRef(null);
   worldRef.current=world;
   const flash=useCallback(message=>{setNotice(message);clearTimeout(toastTimer.current);toastTimer.current=setTimeout(()=>setNotice(''),6000);},[]);
   const refresh=useCallback(async()=>{
     if(mutation.current)return;const started=revision.current;
-    try{const response=await fetch('/api/state',{cache:'no-store',signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw new Error(data.error);if(!mutation.current&&revision.current===started){setWorld(data);setLoadedAt(Date.now());setError('');if(pending.current&&data.processed.includes(pending.current.id))pending.current=null;}}
+    try{await syncOfflineRecords().catch(()=>{});const response=await fetch('/api/state',{cache:'no-store',signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw new Error(data.error);if(!mutation.current&&revision.current===started){setWorld(data);cacheWorld(data).catch(()=>{});setLoadedAt(Date.now());setError('');if(pending.current&&data.processed.includes(pending.current.id))pending.current=null;}}
     catch(e){setError(!navigator.onLine?'You’re offline. Reconnect to open your parking workspace.':e.message||'Could not reach the parking service.');}
   },[]);
   useEffect(()=>{
+    if(new URLSearchParams(window.location.search).get('view')==='arrival')setTab('gate');
     refresh();const poll=setInterval(refresh,12000),timer=setInterval(()=>tick(t=>t+1),1000);
     const on=()=>{setOnline(true);refresh();},off=()=>setOnline(false),install=e=>{e.preventDefault();setInstallPrompt(e);};
-    setOnline(navigator.onLine);const saved=localStorage.getItem('gopark-driver');if(['rashid','layla','sami'].includes(saved))setPersonId(saved);
+    setOnline(navigator.onLine);const saved=localStorage.getItem('gopark-driver');if(saved&&/^[a-z0-9_-]{1,60}$/.test(saved))setPersonId(saved);
     window.addEventListener('online',on);window.addEventListener('offline',off);window.addEventListener('beforeinstallprompt',install);
     if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
     return()=>{clearInterval(poll);clearInterval(timer);clearTimeout(toastTimer.current);window.removeEventListener('online',on);window.removeEventListener('offline',off);window.removeEventListener('beforeinstallprompt',install);if(watch.current!==null)navigator.geolocation.clearWatch(watch.current);};
   },[refresh]);
+  useEffect(()=>{if(!world)return;const alerts=operationalAlerts(world).filter(a=>['arrival','departure-due','possible-departure'].includes(a.kind));const ids=new Set(alerts.map(a=>a.id));if(previousAlerts.current){for(const a of alerts){if(!previousAlerts.current.has(a.id)){flash(`Attendant notification: ${a.text}`);if('Notification'in window&&Notification.permission==='granted'&&document.hidden)new Notification('GoPark · driver arrival',{body:a.text,icon:'/icon-192.png'});}}}previousAlerts.current=ids;},[world,flash]);
   useEffect(()=>{if(world)setPlate(world.people.find(p=>p.id===personId)?.plate||'');},[personId,!!world]);
   useEffect(()=>{
     if(!sheet&&!camera)return;const original=document.activeElement,previous=document.body.style.overflow;document.body.style.overflow='hidden';
@@ -43,7 +48,7 @@ export default function ParkingApp(){
     if(mutation.current)return false;const fingerprint=JSON.stringify({type,data});
     if(pending.current&&pending.current.fingerprint!==fingerprint){await refresh();if(pending.current){flash('Check the previous action by refreshing before starting another.');return false;}}
     const requestId=pending.current?.id||crypto.randomUUID();mutation.current=true;revision.current++;setBusy(true);
-    try{const response=await fetch('/api/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,data,requestId}),signal:AbortSignal.timeout(20000)});const next=await response.json();if(!response.ok){pending.current=null;throw new Error(next.error||'Action could not be completed.');}pending.current=null;setWorld(next);setLoadedAt(Date.now());setError('');if(success)flash(success);return true;}
+    try{const response=await fetch('/api/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,data,requestId}),signal:AbortSignal.timeout(20000)});const next=await response.json();if(!response.ok){pending.current=null;throw new Error(next.error||'Action could not be completed.');}pending.current=null;setWorld(next);cacheWorld(next).catch(()=>{});setLoadedAt(Date.now());setError('');if(success)flash(success);return true;}
     catch(e){if(e.name==='TimeoutError'||e.name==='TypeError'||e.name==='AbortError'){pending.current={id:requestId,fingerprint};flash('Connection interrupted. Refresh to check the result, or retry the same action safely.');}else flash(e.message);return false;}
     finally{mutation.current=false;setBusy(false);}
   }
@@ -57,10 +62,10 @@ export default function ParkingApp(){
   }
   function exportData(){const url=URL.createObjectURL(new Blob([JSON.stringify(world,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='gopark-demo-export.json';a.click();URL.revokeObjectURL(url);}
   if(!world)return <div className="loading-screen"><div className="brand"><span className="brand-icon">P<span/></span>go<span>park</span><sup>SENSE</sup></div><div className="loading-ring"/><h1>Making room for your day.</h1><p>{error||'Opening your private parking demo…'}</p>{error&&<button className="button primary" onClick={refresh}>Try again</button>}</div>;
-  const p=world.people.find(p=>p.id===personId),b=activeBooking(world,personId),currentTier=tier(p.tierScore);
-  const openLot=id=>{setSelected(id);setRewardId('');setSheet('lot');};
+  const p=world.people.find(p=>p.id===personId)||world.people[0],b=activeBooking(world,p.id),currentTier=membership(p);
+  const openLot=(id,draft=null)=>{setSelected(id);setBookingDraft(draft?{...draft,lotId:id}:null);if(draft)setHours(draft.hours);setRewardId('');setSheet('lot');};
   const showRules=()=>{setRulesDraft({...world.rules});setSheet('rules');};
-  const context={world,tab,setTab,personId,p,b,currentTier,selected,setSelected,openLot,sheet,setSheet,hours,setHours,plate,setPlate,rewardId,setRewardId,busy,send,flash,gateLot,setGateLot,direction,setDirection,gatePlate,setGatePlate,setCamera,gpsOn,gpsMessage,position,enableGPS,rulesDraft,setRulesDraft,showRules,switchDriver,exportData,installPrompt,setInstallPrompt};
+  const context={world,tab,setTab,personId,p,b,currentTier,selected,setSelected,openLot,bookingDraft,sheet,setSheet,hours,setHours,plate,setPlate,rewardId,setRewardId,busy,send,flash,gateLot,setGateLot,direction,setDirection,gatePlate,setGatePlate,setCamera,gpsOn,gpsMessage,position,enableGPS,rulesDraft,setRulesDraft,showRules,switchDriver,exportData,installPrompt,setInstallPrompt};
   return <ParkingContext.Provider value={context}><div className="app-shell">
     <aside className="sidebar"><a className="brand" href="#" onClick={e=>{e.preventDefault();setTab('discover');}}><span className="brand-icon">P<span/></span>go<span>park</span><sup>SENSE</sup></a><span className="sidebar-label">YOUR EVERYDAY, EASIER</span><nav>{NAV.map(n=><button key={n.id} className={tab===n.id?'active':''} onClick={()=>{setTab(n.id);setSheet(null);}}><n.icon size={19}/><span>{n.label}</span>{n.id==='activity'&&b&&<i/>}</button>)}</nav><div className="sidebar-bottom"><div className="small-illustration"><Leaf/><span>A little less circling.<br/><b>A little more living.</b></span></div><button onClick={showRules}><Settings2 size={18}/>Demo & parking rules</button><button onClick={()=>setSheet('about')}><Smartphone size={18}/>Get the mobile app</button><div className="demo-label"><span/>HACKATHON PROTOTYPE</div></div></aside>
     <div className="workspace"><header className="topbar"><div className="mobile-brand brand"><span className="brand-icon">P<span/></span>go<span>park</span></div><div className="breadcrumb">Your city, a little closer <span>/</span><b>{tab==='gate'?'Gate operations':'Beirut'}</b></div><div className="header-actions"><span className={`connection ${!online||error?'offline':''}`}>{online&&!error?<Wifi size={13}/>:<WifiOff size={13}/>} {online&&!error?'Live demo':'Offline'}</span><button className="icon-button notification" aria-label="Notifications" onClick={()=>setSheet('notifications')}><Bell size={18}/><i/></button><button className="avatar" aria-label="Switch demo driver" onClick={()=>setSheet('profile')}>{p.name[0]}</button></div></header>

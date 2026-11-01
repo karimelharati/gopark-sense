@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+let model=fs.readFileSync('lib/parking.mjs','utf8');
+model=model.replace("blocks=result.penalty/Math.max(1,w.rules.penaltyPerBlock)","rawLate=Math.max(0,(at-b.endsAt)/MINUTE),blocks=rawLate>w.rules.graceMinutes?Math.ceil((rawLate-w.rules.graceMinutes)/w.rules.penaltyBlockMinutes):0");
+model=model.replace("const earned=late.penalty===0?w.rules.pointsPerStay+(b.inconvenientAccepted?w.rules.difficultSpacePoints:0):0,gain=late.penalty===0?w.rules.tierGainPerStay:0;","const onTime=at<=b.endsAt+w.rules.graceMinutes*MINUTE,earned=onTime?w.rules.pointsPerStay+(b.inconvenientAccepted?w.rules.difficultSpacePoints:0):0,gain=onTime?w.rules.tierGainPerStay:0;");
+model=model.replace("p.stars+(late.penalty===0?w.rules.starGain:","p.stars+(onTime?w.rules.starGain:");
+model=model.replace("earned,...late,previousTier","earned,...late,tierLoss:Math.max(0,oldScore-p.tierScore),previousTier");
+model=model.replace("if(existing)return existing;","if(existing){const current=w.bookings.find(b=>b.id===existing.bookingId);if(!existing.bookingId||current&&current.version===existing.bookingVersion&&current.status===(data.direction==='entry'?'reserved':'parked'))return existing;existing.status='rejected';existing.reason='Superseded by a changed booking.';}");
+model=model.replace("e.openedAt=time;e.openingSource=", "const current=e.bookingId?w.bookings.find(b=>b.id===e.bookingId):null;if(current&&(current.version!==e.bookingVersion||current.status!==(e.direction==='entry'?'reserved':'parked')))fail('Gate authorization is stale: the booking changed or was cancelled.');if(time-e.at>2*MINUTE)fail('Gate request expired. Request or verify presence again.');e.openedAt=time;e.openingSource=");
+model=model.replace("if(nearby&&['reserved','parked'].includes(b.status)","if(!nearby&&b.status==='parked')alert(w,`possible-exit:${b.id}`,`${b.plate}: phone left the area. Vehicle departure remains unconfirmed.`,'possible-departure',b.lotId,b.personId,b.id);if(nearby&&['reserved','parked'].includes(b.status)");
+fs.writeFileSync('lib/parking.mjs',model);
+let policies=fs.readFileSync('lib/policies.mjs','utf8');
+policies=policies.replace("if(b.status==='parked'&&time>b.endsAt)","if(b.status==='parked'&&b.endsAt>=time&&b.endsAt-time<=15*MINUTE)out.push({id:`departure-due:${b.id}`,kind:'departure-due',lotId:b.lotId,personId:b.personId,bookingId:b.id,text:`${b.plate} is due to leave within 15 minutes. Ask for a confirmed departure, not a GPS-only checkout.`,at:b.endsAt});if(b.status==='parked'&&time>b.endsAt)");
+fs.writeFileSync('lib/policies.mjs',policies);
+let app=fs.readFileSync('app/parking-app.jsx','utf8').replace(".filter(a=>a.kind==='arrival')",".filter(a=>['arrival','departure-due','possible-departure'].includes(a.kind))");fs.writeFileSync('app/parking-app.jsx',app);
+let pass=fs.readFileSync('app/api/pass/route.ts','utf8').replace("startsAt:b.startsAt,endsAt:b.endsAt","startsAt:b.startsAt,validFrom:b.startsAt-world.rules.arrivalEarlyMinutes*60000,endsAt:b.endsAt");fs.writeFileSync('app/api/pass/route.ts',pass);
+let crypto=fs.readFileSync('lib/pass-crypto.mjs','utf8').replace('at<cert.startsAt-15*60000','at<(cert.validFrom??cert.startsAt-15*60000)');fs.writeFileSync('lib/pass-crypto.mjs',crypto);

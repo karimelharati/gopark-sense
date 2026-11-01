@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+let s=fs.readFileSync('tests/parking.test.mjs','utf8');
+s=s.replace('tier, distanceMeters }','tier, distanceMeters, intervalCapacity }');
+s=s.replace('{ occupied: 35, reserved: 2, physical: 13, available: 11, capacity: 48 }','{ occupied: 35, reserved: 0, physical: 13, available: 13, capacity: 48 }');
+s=s.replace("assert.equal(availability(next, 'aub').available, 10)","assert.equal(availability(next, 'aub').available, 12)");
+s=s.replace("assert.equal(availability(w, 'aub').reserved, 2)","assert.equal(availability(w, 'aub').reserved, 0)");
+s=s.replaceAll("assert.equal(availability(w, 'aub').available, 11)","assert.equal(availability(w, 'aub').available, 13)");
+s=s.replace("b = { endsAt: 1000000 }","b = { endsAt: 1000000, lotId: 'aub' }");
+s=s.replace("hours: 1, rewardId });","hours: 1, startsAt: Date.now() + 3600000, rewardId });");
+s=s.replace("/active booking/","/Gold/").replace("hours: 1 }), /full/)","hours: 1 }), /capacity/)");
+s=s.replace("assert.equal(availability(w, 'aub').available, 0);\n  assert.throws", "assert.equal(intervalCapacity(w, 'aub', Date.now(), Date.now()+3600000).available, 0);\n  assert.throws");
+fs.writeFileSync('tests/parking.test.mjs',s);

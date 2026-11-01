@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./upgrade.css";
+import './arrival-demo.css';
+import './destination-finder.css';
 
 export const metadata: Metadata = {
   title: "GoPark Sense — A better place to park",
